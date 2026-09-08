@@ -1,4 +1,4 @@
-from decision_tree import Chance, Choice, Outcome, binary_probability_flip, evaluate
+from decision_tree import Chance, Choice, Outcome, binary_probability_flip, evaluate, expected_value_of_perfect_information
 
 
 def test_chance_ev_and_downside():
@@ -44,3 +44,22 @@ def test_empty_choice_fails_closed():
         assert "requires options" in str(exc)
     else:
         raise AssertionError("empty choice accepted")
+
+
+def test_perfect_information_has_positive_value_when_state_changes_choice():
+    value = expected_value_of_perfect_information((0.5, 0.5), ((100, 0), (40, 40)))
+    assert value == 20.0
+
+
+def test_perfect_information_zero_when_same_option_dominates_every_state():
+    value = expected_value_of_perfect_information((0.25, 0.75), ((10, 20), (5, 15)))
+    assert value == 0.0
+
+
+def test_perfect_information_rejects_mismatched_states():
+    try:
+        expected_value_of_perfect_information((0.5, 0.5), ((10,), (0, 20)))
+    except ValueError as exc:
+        assert "one payoff per state" in str(exc)
+    else:
+        raise AssertionError("mismatched state vectors accepted")
