@@ -20,4 +20,20 @@ jobs:
         with:
           python-version: '3.12'
       - name: Run deterministic contracts
-        run: python -m unittest discover -s tests -p 'test_contracts.py' -v
+        run: |
+          python - <<'PY'
+          import inspect
+          import tests.test_contracts as contracts
+
+          tests = sorted(
+              (name, fn)
+              for name, fn in vars(contracts).items()
+              if name.startswith("test_") and inspect.isfunction(fn)
+          )
+          if not tests:
+              raise SystemExit("no deterministic contracts discovered")
+          for name, fn in tests:
+              fn()
+              print(f"PASS {name}")
+          print(f"{len(tests)} deterministic contracts passed")
+          PY
