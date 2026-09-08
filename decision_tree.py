@@ -70,3 +70,19 @@ def binary_probability_flip(payoff_a: Tuple[float, float], payoff_b: Tuple[float
         return None
     p = numerator / denominator
     return p if 0.0 <= p <= 1.0 else None
+
+
+def expected_value_of_perfect_information(probabilities: Tuple[float, ...], option_payoffs: Tuple[Tuple[float, ...], ...]) -> float:
+    """EVPI for discrete states when the state is observed before choosing an option."""
+    if not probabilities or not option_payoffs:
+        raise ValueError("probabilities and options must be non-empty")
+    states = len(probabilities)
+    if any(len(payoffs) != states for payoffs in option_payoffs):
+        raise ValueError("every option must define one payoff per state")
+    for p in probabilities:
+        _validate_probability(p)
+    if abs(sum(probabilities) - 1.0) > 1e-12:
+        raise ValueError("probabilities must sum to 1")
+    without_information = max(sum(p * payoff for p, payoff in zip(probabilities, payoffs)) for payoffs in option_payoffs)
+    with_information = sum(p * max(payoffs[state] for payoffs in option_payoffs) for state, p in enumerate(probabilities))
+    return max(0.0, with_information - without_information)
