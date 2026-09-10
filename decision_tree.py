@@ -31,6 +31,16 @@ class Summary:
     worst_case: float
 
 
+@dataclass(frozen=True)
+class ProbabilitySensitivity:
+    state: str
+    current_probability: float
+    flip_probability: float
+    distance_to_flip: float
+    preferred_below: str
+    preferred_above: str
+
+
 def _validate_probability(p: float) -> None:
     if not 0.0 <= p <= 1.0:
         raise ValueError("probability must be in [0, 1]")
@@ -70,6 +80,42 @@ def binary_probability_flip(payoff_a: Tuple[float, float], payoff_b: Tuple[float
         return None
     p = numerator / denominator
     return p if 0.0 <= p <= 1.0 else None
+
+
+def binary_probability_sensitivity(
+    state: str,
+    current_probability: float,
+    option_a: Tuple[str, Tuple[float, float]],
+    option_b: Tuple[str, Tuple[float, float]],
+) -> ProbabilitySensitivity | None:
+    """Return the nearest binary probability threshold capable of flipping two options."""
+    _validate_probability(current_probability)
+    name_a, payoff_a = option_a
+    name_b, payoff_b = option_b
+    flip = binary_probability_flip(payoff_a, payoff_b)
+    if flip is None:
+        return None
+
+    def preferred(p: float) -> str:
+        ev_a = p * payoff_a[0] + (1.0 - p) * payoff_a[1]
+        ev_b = p * payoff_b[0] + (1.0 - p) * payoff_b[1]
+        if abs(ev_a - ev_b) <= 1e-12:
+            return min(name_a, name_b)
+        return name_a if ev_a > ev_b else name_b
+
+    epsilon = min(1e-9, max(flip, 1.0 - flip) * 1e-9)
+    below = preferred(max(0.0, flip - epsilon))
+    above = preferred(min(1.0, flip + epsilon))
+    if below == above:
+        return None
+    return ProbabilitySensitivity(
+        state=state,
+        current_probability=current_probability,
+        flip_probability=flip,
+        distance_to_flip=abs(current_probability - flip),
+        preferred_below=below,
+        preferred_above=above,
+    )
 
 
 def expected_value_of_perfect_information(probabilities: Tuple[float, ...], option_payoffs: Tuple[Tuple[float, ...], ...]) -> float:
