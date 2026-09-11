@@ -41,6 +41,15 @@ class ProbabilitySensitivity:
     preferred_above: str
 
 
+@dataclass(frozen=True)
+class PayoffSensitivity:
+    option: str
+    state_index: int
+    current_payoff: float
+    flip_payoff: float
+    distance_to_flip: float
+
+
 def _validate_probability(p: float) -> None:
     if not 0.0 <= p <= 1.0:
         raise ValueError("probability must be in [0, 1]")
@@ -116,6 +125,35 @@ def binary_probability_sensitivity(
         preferred_below=below,
         preferred_above=above,
     )
+
+
+def payoff_flip_sensitivity(
+    probabilities: Tuple[float, ...],
+    option: Tuple[str, Tuple[float, ...]],
+    competitor: Tuple[str, Tuple[float, ...]],
+    state_index: int,
+) -> PayoffSensitivity | None:
+    """Payoff threshold in one state where two options tie, holding all else fixed."""
+    if not probabilities:
+        raise ValueError("probabilities must be non-empty")
+    for p in probabilities:
+        _validate_probability(p)
+    if abs(sum(probabilities) - 1.0) > 1e-12:
+        raise ValueError("probabilities must sum to 1")
+    name, payoffs = option
+    _, competitor_payoffs = competitor
+    if len(payoffs) != len(probabilities) or len(competitor_payoffs) != len(probabilities):
+        raise ValueError("every option must define one payoff per state")
+    if not 0 <= state_index < len(probabilities):
+        raise IndexError("state_index out of range")
+    coefficient = probabilities[state_index]
+    if coefficient <= 1e-15:
+        return None
+    competitor_ev = sum(p * x for p, x in zip(probabilities, competitor_payoffs))
+    fixed_ev = sum(p * x for i, (p, x) in enumerate(zip(probabilities, payoffs)) if i != state_index)
+    flip = (competitor_ev - fixed_ev) / coefficient
+    current = float(payoffs[state_index])
+    return PayoffSensitivity(name, state_index, current, flip, abs(current - flip))
 
 
 def expected_value_of_perfect_information(probabilities: Tuple[float, ...], option_payoffs: Tuple[Tuple[float, ...], ...]) -> float:
