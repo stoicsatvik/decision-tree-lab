@@ -1,4 +1,4 @@
-from decision_tree import Chance, Choice, Outcome, binary_probability_flip, binary_probability_sensitivity, evaluate, expected_value_of_perfect_information
+from decision_tree import Chance, Choice, Outcome, binary_probability_flip, binary_probability_sensitivity, evaluate, expected_value_of_perfect_information, payoff_flip_sensitivity
 
 
 def test_chance_ev_and_downside():
@@ -49,6 +49,29 @@ def test_probability_sensitivity_rejects_invalid_current_probability():
         assert "[0, 1]" in str(exc)
     else:
         raise AssertionError("invalid current probability accepted")
+
+
+def test_payoff_sensitivity_finds_flip_threshold():
+    result = payoff_flip_sensitivity((0.4, 0.6), ("focused", (90, 30)), ("broad", (150, -20)), 0)
+    assert result is not None
+    assert result.option == "focused"
+    assert result.state_index == 0
+    assert abs(result.flip_payoff - 112.5) < 1e-12
+    assert abs(result.distance_to_flip - 22.5) < 1e-12
+
+
+def test_payoff_sensitivity_zero_probability_state_has_no_leverage():
+    result = payoff_flip_sensitivity((0.0, 1.0), ("a", (999, 10)), ("b", (0, 20)), 0)
+    assert result is None
+
+
+def test_payoff_sensitivity_rejects_mismatched_state_vectors():
+    try:
+        payoff_flip_sensitivity((0.5, 0.5), ("a", (10,)), ("b", (0, 20)), 0)
+    except ValueError as exc:
+        assert "one payoff per state" in str(exc)
+    else:
+        raise AssertionError("mismatched state vectors accepted")
 
 
 def test_invalid_probability_mass_fails_closed():
