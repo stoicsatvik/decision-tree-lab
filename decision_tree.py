@@ -50,6 +50,15 @@ class PayoffSensitivity:
     distance_to_flip: float
 
 
+@dataclass(frozen=True)
+class FlipAssumption:
+    kind: str
+    target: str
+    current_value: float
+    flip_value: float
+    normalized_distance: float
+
+
 def _validate_probability(p: float) -> None:
     if not 0.0 <= p <= 1.0:
         raise ValueError("probability must be in [0, 1]")
@@ -91,12 +100,7 @@ def binary_probability_flip(payoff_a: Tuple[float, float], payoff_b: Tuple[float
     return p if 0.0 <= p <= 1.0 else None
 
 
-def binary_probability_sensitivity(
-    state: str,
-    current_probability: float,
-    option_a: Tuple[str, Tuple[float, float]],
-    option_b: Tuple[str, Tuple[float, float]],
-) -> ProbabilitySensitivity | None:
+def binary_probability_sensitivity(state: str, current_probability: float, option_a: Tuple[str, Tuple[float, float]], option_b: Tuple[str, Tuple[float, float]]) -> ProbabilitySensitivity | None:
     """Return the nearest binary probability threshold capable of flipping two options."""
     _validate_probability(current_probability)
     name_a, payoff_a = option_a
@@ -117,22 +121,10 @@ def binary_probability_sensitivity(
     above = preferred(min(1.0, flip + epsilon))
     if below == above:
         return None
-    return ProbabilitySensitivity(
-        state=state,
-        current_probability=current_probability,
-        flip_probability=flip,
-        distance_to_flip=abs(current_probability - flip),
-        preferred_below=below,
-        preferred_above=above,
-    )
+    return ProbabilitySensitivity(state, current_probability, flip, abs(current_probability - flip), below, above)
 
 
-def payoff_flip_sensitivity(
-    probabilities: Tuple[float, ...],
-    option: Tuple[str, Tuple[float, ...]],
-    competitor: Tuple[str, Tuple[float, ...]],
-    state_index: int,
-) -> PayoffSensitivity | None:
+def payoff_flip_sensitivity(probabilities: Tuple[float, ...], option: Tuple[str, Tuple[float, ...]], competitor: Tuple[str, Tuple[float, ...]], state_index: int) -> PayoffSensitivity | None:
     """Payoff threshold in one state where two options tie, holding all else fixed."""
     if not probabilities:
         raise ValueError("probabilities must be non-empty")
@@ -154,6 +146,32 @@ def payoff_flip_sensitivity(
     flip = (competitor_ev - fixed_ev) / coefficient
     current = float(payoffs[state_index])
     return PayoffSensitivity(name, state_index, current, flip, abs(current - flip))
+
+
+def assumption_flip_report(state_names: Tuple[str, str], probabilities: Tuple[float, float], option_a: Tuple[str, Tuple[float, float]], option_b: Tuple[str, Tuple[float, float]]) -> Tuple[FlipAssumption, ...]:
+    """Rank single-assumption changes that can flip a binary decision.
+
+    Probability distance is normalized to its [0,1] domain. Payoff distance is
+    normalized by the largest absolute payoff in the decision, making unlike
+    assumptions comparable without pretending they share physical units.
+    """
+    if len(state_names) != 2:
+        raise ValueError("binary report requires exactly two state names")
+    if len(probabilities) != 2:
+        raise ValueError("binary report requires exactly two probabilities")
+    scale = max(abs(x) for _, payoffs in (option_a, option_b) for x in payoffs)
+    if scale <= 1e-15:
+        raise ValueError("payoff scale must be non-zero")
+    rows = []
+    probability = binary_probability_sensitivity(state_names[0], probabilities[0], option_a, option_b)
+    if probability is not None:
+        rows.append(FlipAssumption("probability", state_names[0], probability.current_probability, probability.flip_probability, probability.distance_to_flip))
+    for option, competitor in ((option_a, option_b), (option_b, option_a)):
+        for index, state in enumerate(state_names):
+            payoff = payoff_flip_sensitivity(probabilities, option, competitor, index)
+            if payoff is not None:
+                rows.append(FlipAssumption("payoff", f"{option[0]}:{state}", payoff.current_payoff, payoff.flip_payoff, payoff.distance_to_flip / scale))
+    return tuple(sorted(rows, key=lambda row: (row.normalized_distance, row.kind, row.target)))
 
 
 def expected_value_of_perfect_information(probabilities: Tuple[float, ...], option_payoffs: Tuple[Tuple[float, ...], ...]) -> float:
