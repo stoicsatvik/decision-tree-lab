@@ -56,8 +56,10 @@ def test_payoff_sensitivity_finds_flip_threshold():
     assert result is not None
     assert result.option == "focused"
     assert result.state_index == 0
-    assert abs(result.flip_payoff - 112.5) < 1e-12
-    assert abs(result.distance_to_flip - 22.5) < 1e-12
+    # Broad EV = 0.4*150 + 0.6*(-20) = 48. Focused fixed low-state
+    # contribution is 0.6*30 = 18, so 0.4*x + 18 = 48 => x = 75.
+    assert abs(result.flip_payoff - 75.0) < 1e-12
+    assert abs(result.distance_to_flip - 15.0) < 1e-12
 
 
 def test_payoff_sensitivity_zero_probability_state_has_no_leverage():
